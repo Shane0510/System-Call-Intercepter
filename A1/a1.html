@@ -1,0 +1,706 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+
+    <title>Assignment 1 - Hijacking System Calls and Monitoring Processes</title>
+    
+    <meta name="author" content="Bogdan Simion">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--
+  <link href="http://www.teach.cs.toronto.edu/~csc369h/winter/assets/themes/bootstrap/resources/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+  <link href="http://www.teach.cs.toronto.edu/~csc369h/winter//assets/css/mystyle.css" rel="stylesheet">
+-->
+  <link href="http://www.teach.cs.toronto.edu/~csc369h/winter//assets/css/stripped.css" rel="stylesheet">
+  
+    <!--[if lt IE 9]>
+      <script src="http://www.teach.cs.toronto.edu/~csc369h/winter/assets/themes/bootstrap/resources/respond/Respond.min.js"></script>
+    <![endif]-->
+
+    <link href="/atom.xml" type="application/atom+xml" rel="alternate" title="Sitewide ATOM Feed">
+    <link href="/rss.xml" type="application/rss+xml" rel="alternate" title="Sitewide RSS Feed">
+
+  </head>
+
+  <body>
+    <nav class="navbar navbar-default" role="navigation">
+      <div class="container">
+        <div class="navbar-header">
+          <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+            <span class="sr-only">Toggle navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a class="navbar-brand" href="http://www.teach.cs.toronto.edu/~csc369h/winter/index.html">CSC369H: Operating Systems</a>
+        </div>
+
+        <div class="collapse navbar-collapse navbar-ex1-collapse">
+          <ul class="nav navbar-nav">
+          
+              
+                  
+              
+<!--               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/info.html" target="_blank">Syllabus</a></li>
+-->
+               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/info.html">Syllabus</a></li>
+           
+              
+                  
+              
+<!--               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/lectures.html" target="_blank">Lectures</a></li>
+-->
+               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/lectures.html">Lectures</a></li>
+           
+              
+                  
+              
+<!--               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/assignments.html" target="_blank">Assignments</a></li>
+-->
+               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/assignments.html">Assignments</a></li>
+           
+              
+                  
+              
+<!--               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/tests.html" target="_blank">Tests</a></li>
+-->
+               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/tests.html">Tests</a></li>
+           
+              
+                  
+              
+<!--               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/grades.html" target="_blank">Grades</a></li>
+-->
+               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/grades.html">Grades</a></li>
+           
+              
+                  
+              
+<!--               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/feedback.html" target="_blank">Anonymous Feedback</a></li>
+-->
+               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/feedback.html">Anonymous Feedback</a></li>
+           
+              
+                  
+              
+<!--               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/discussions.html" target="_blank">Discussion Board</a></li>
+-->
+               <li><a href="http://www.teach.cs.toronto.edu/~csc369h/winter/discussions.html">Discussion Board</a></li>
+           
+              
+                  
+              
+<!--               <li><a href="https://markus.teach.cs.toronto.edu/csc369-2017-01/" target="_blank">MarkUs</a></li>
+-->
+               <li><a href="https://markus.teach.cs.toronto.edu/csc369-2017-01/">MarkUs</a></li>
+           
+          </ul>
+        </div>
+      </div>
+    </nav>
+    <div class="container">
+      
+<div class="page-header">
+  <h1>Assignment 1 - Hijacking System Calls and Monitoring Processes </h1>
+</div>
+
+<div class="row">
+  <div class="col-xs-12">
+      
+
+<p> <b>Due</b>: Jan 27, at 10:00pm</p>
+
+<h2>Overview</h2>
+
+	<p>
+	In this assignment, you will achieve the goal of hijacking (intercepting)
+	system calls by writing and installing a very basic <b>kernel module</b> to the
+	Linux kernel. 
+	</p>
+
+	<p>
+	Here is what "hijacking (intercepting) a system call" means. You will
+	implement a new system call named <code>my_syscall</code>, which will allow
+	you to send commands from userspace, to intercept another 
+	pre-existing system call (like read, write, open, etc.).
+	After a system call is intercepted, the intercepted system call would log 
+	a message first before continuing performing what it was supposed to do. 
+	</p>
+
+	<p>
+	For example, if we call <code>my_syscall</code> with command
+	<code>REQUEST_SYSCALL_INTERCEPT</code> and target system call number <code>__NR_mkdir</code>
+	(which is the macro representing the system call <code>mkdir</code>) 
+	as parameters, then the <code>mkdir</code>
+	system call would be intercepted; then, when another process calls
+	<code>mkdir</code>, <code>mkdir</code> would log some message (e.g.,
+	"muhahaha") first, then perform what it was supposed to do (i.e., make a
+	directory).
+	</p>
+
+	<p>
+	But wait, that's not the whole story yet. Actually we don't want
+	<code>mkdir</code> to log a message whenever <strong>any process</strong>
+	calls it. Instead, we only want <code>mkdir</code> to log a message when a
+	certain set of processes (PIDs) are calling <code>mkdir</code>. In other
+	words, we want to <strong><i>monitor</i></strong> a set of PIDs for the
+	system call <code>mkdir</code>. Therefore, you will need to keep track, 
+	for each intercepted system call, of the list of monitored PIDs. 
+	Our new system call will support two additional commands to add/remove 
+	PIDs to/from the list.
+	</p>
+
+	<p>
+	When we want to stop hijacking a system call (let's say <code>mkdir</code>
+	but it can be any of the previously hijacked system calls), we can invoke 
+	the interceptor (<code>my_syscall</code>), with a 
+	<code>REQUEST_SYSCALL_RELEASE</code> command as an argument and the system 
+	call number that we want to release.
+	This will stop intercepting the target system call <code>mkdir</code>,
+	and the behaviour of <code>mkdir</code> should go back 
+	to normal like nothing happened.
+	</p>
+
+
+<h2>Checklist</h2>
+
+	<p>
+	Here is a checklist that should help get you started, and to make sure that
+	you won't forget the important things:
+	</p>
+
+	<ol>
+		<li>Find your SVN repository on MarkUs (see "Submission"), and do a checkout to 
+			make sure you can access it. The starter code files can be found on the 
+			teaching lab machines (either the servers or workstations),
+			under /u/csc369h/winter/pub/a1-starter/starter_code.tgz</li>
+		<li>Test that you have access to the VM in the teaching labs (instructions below).</li>
+		<li>Download the <a
+			href="http://www.cs.toronto.edu/~bogdan/stuff/UbuntuServer-CSC369-upd.zip">disk
+		image for the virtual machine here (gzipped)</a>.<br/>
+		On the host computer (your laptop or a lab computer), use a virtual
+		machine software (VirtualBox or VMware) to create a virtual machine
+		using the the disk image you downloaded (instructions to follow below).</li>
+		<li>Read and understand the existing code in the starter code. This is
+		an important step of this assignment, and you should not start writing
+		your own code before you have a good understanding of the starter code.
+		</li>
+		<li>Implement the new kernel module by completing source file
+		<strong>"interceptor.c"</strong>. Sections that need to be completed
+		are marked with the <code>TODO</code> tag). Do NOT modify the header
+		file "interceptor.h".</li>
+		<li>Make sure to test as you go. You should first make sure that the 
+		commands to intercept and de-intercept work well, before attempting
+		to implement the monitoring commands.
+		</li>
+		<li>Testing and debugging (<strong>must be done in the virtual machine</strong>):
+			<ol type="a">
+				<li>Check out your code inside the virtual machine.</li>
+				<li>Type <code>make</code> to compile your kernel module. Make
+				sure there is no error or warning.</li>
+				<li>Implement the intercept and release commands.</li>
+				<li>Compile the test_intercept.c program using gcc.</li>
+				<li>Test your code using <code>sudo ./test_intercept</code>, 
+					and make sure that all tests pass.</li>
+				<li>Implement the monitoring/un-monitoring commands.</li>
+				<li>Compile the test_full.c program using gcc.</li>
+				<li>Test your code using <code>sudo ./test_full</code>, 
+					and make sure that all tests pass.
+				</li>
+			</ol>
+		</li>
+		<li>Submit your code on time. See "Submission" for more details.</li>
+		<li>Congratulations! You now have some great hands-on experience with the Linux kernel!  
+		You can now be proud of having programmed a Linux kernel module.
+		You know what else are commonly implemented as kernel modules? 
+		Device drivers! Although they are more complex, you now technically
+		have the basis to try to write one. Isn't that cool? 
+		</li>
+	</ol>
+
+
+<h2>Goal</h2>
+
+<p>
+The goal of this assignment is to learn more about system calls and to use 
+synchronization mechanisms. For this assignment you will be writing a very 
+basic kernel module that intercepts system calls and monitors processes 
+on demand. 
+</p>
+
+<h2>Requirements</h2>
+
+<p>
+In order to be able to issue our own hijacking commands from userspace, we 
+need a new system call that takes as parameters the command, the system call 
+number (to be intercepted), and (for monitoring) a pid. 
+</p>
+
+<p>
+Instead of adding a new system call, which can be tricky, our new system call 
+<code>my_syscall</code> will be installed in place of an unused system call 
+in the system call table.  
+We will connect my_syscall to the entry number MY_CUSTOM_SYSCALL (in effect, entry 0
+which is mostly unused). 
+The new system call my_syscall, defined as follows:
+  
+	<code style="margin-left:40px;">int my_syscall(int cmd, int syscall, int pid);</code>
+	
+will serve as an interceptor and will receive the following 
+commands from userspace:
+<ol type="a">
+  <li>REQUEST_SYSCALL_INTERCEPT: intercept the system call <code>syscall</code></li>
+  <li>REQUEST_SYSCALL_RELEASE: de-intercept the system call <code>syscall</code></li>
+  
+  <li>REQUEST_START_MONITORING:  start monitoring process
+		<code>pid</code> for system call <code>syscall</code>, i.e., add
+		<code>pid</code> to the <code>syscall</code>'s list of monitored PIDs.
+		A special case is that if <code>pid</code> is <code>0</code> then
+		<strong>all</strong> processes are monitored for <code>syscall</code>,
+		but only root has the permission to issue this command (see the
+		comments for <code>my_syscall</code> in the starter code for more
+		details).</li>
+  
+  <li>REQUEST_STOP_MONITORING: stop monitoring process
+		<code>pid</code> for system call <code>syscall</code>, i.e., remove
+		<code>pid</code> from the <code>syscall</code>'s list of monitored
+		PIDs.</li>
+</ol>
+</p>
+
+<p>
+	<b>Kernel module operation</b><br/><br/>
+Your kernel module must, upon initialization, replace the system call table entry 
+for the MY_CUSTOM_SYSCALL number, with the <code>my_syscall</code> function. 
+When the module is released, it must restore this system call to its original routine.  
+</p>
+
+<p>
+As a result, when your kernel module is loaded, any subsequent invocations of the 
+system call number MY_CUSTOM_SYSCALL from userspace, will issue four types of commands, 
+to intercept or release a given system call, and to start and stop monitoring a pid 
+for a specific syscall. You must implement the <code>my_syscall</code> function accordingly. 
+</p>
+
+<p>
+<b>1. REQUEST_SYSCALL_INTERCEPT and REQUEST_SYSCALL_RELEASE.</b><br/>
+When an intercept command is issued, the corresponding entry in the system call table 
+will be replaced with a generic interceptor function (discussed later) and the original 
+system call will be saved. When a REQUEST_SYSCALL_RELEASE command is issued, the original 
+saved system call is restored in the system call table in its corresponding position. 
+</p>
+
+<p>
+<b>2. REQUEST_START_MONITORING and REQUEST_STOP_MONITORING</b><br/>
+Monitoring a process consists of the module logging into userspace some information about 
+the process and the system call: the system call number, the parameters of the system call, 
+and the pid of the process. 
+</p>
+
+<p>
+When a REQUEST_START_MONITORING command comes through our custom system call, the kernel 
+module must record internally that the pid passed as a parameter should be monitored for 
+the syscall number (passed as a parameter as well). The monitoring can be done for a specific 
+pid, or for all pids (in which case the <code>pid</code> parameter for <code>my_syscall</code> 
+will be 0).
+</p>
+
+<p>
+Ok, but I still don't understand, what does it mean to monitor a pid? 
+And what does the generic interceptor function do? 
+</p>
+
+<p>
+Let's start with the monitoring. We have established that once the user issues a monitoring 
+command, the kernel module records internally that <code>pid</code> should be monitored 
+whenever it issues system call number <code>syscall</code> (it will be placed in a monitored 
+list - see details in starter code).  
+</p>
+
+<p>
+We have also established that the generic interceptor function is what each intercepted 
+system call will reach. In other words, whenever we reach the generic interceptor, we know 
+that the system call is being intercepted (otherwise we would not reach this). If the pid 
+of the process issuing the system call is being monitored, that means that we must print 
+some information to a log. The log message will simply contain the system call number and 
+the arguments, as well as the calling process's pid. <br/>
+We have provided you in the starter code with a <code>log_message</code> macro, which takes 
+care of sending a message to the system log. 
+You can check the log using the <code>dmesg</code> command.
+</p>
+
+<p>
+As you might expect, regardless if a pid is monitored or not, the generic interceptor must 
+eventually (once it's done logging, if applicable), call the original system call to allow 
+normal operation of all processes in the system. 
+</p>
+
+<p>
+Alright, but what if a process exits before the user can issue a system call to stop monitoring it? <br/>
+Good question! When your kernel module initializes, you should also hijack the <code>exit_group</code> 
+system call (with number __NR_exit_group), by replacing it in the system call table with your own 
+custom function <code>my_exit_group</code>.
+Of course, make sure to save the original exit_group function, and to restore it when your kernel 
+module is unloaded. <br/>
+Implementing the  <code>my_exit_group</code> function should be simple: all you have to do is to 
+remove the pid of the exiting process from all kernel module's internal bookkeeping on monitored 
+processes, then call the original exit_group function.
+</p>
+
+<h2>Error Conditions</h2>
+
+<p>
+You must make sure to check any possible misuse of the commands. 
+In case of a misuse, you should return a proper error code (e.g.,
+<code>-EINVAL</code>, <code>-EPERM</code>, google "Linux error code" for
+more information on error codes).
+Here is a list of things you should keep in mind:
+<ol type="A">
+	<li>For each of the commands, check that the arguments are valid (-EINVAL):
+	    <ul>
+	    	<li>The syscall number must be valid: not negative, not &gt; NR_syscalls 
+	    		(the last syscall number in the table), and not MY_CUSTOM_SYSCALL itself 
+	    		(for obvious reasons). 
+	    	</li>
+	    	<li> The pid must be valid for the monitoring commands. It cannot be 
+	    		a negative integer, and it must be an existing pid (except for the 
+	    		case when it's 0, indicating that we want to start/stop monitoring 
+	    		for <b>all pids</b>).<br/>
+	    	 If a pid belongs to a valid process, then the following call is not NULL:<br/>
+	    	 &nbsp;&nbsp;&nbsp; <code>pid_task(find_vpid(pid), PIDTYPE_PID)</code>
+	    	</li>
+	    </ul>
+	</li>
+	<li>
+		Check that the called has the right permissions (-EPERM):
+		<ul>
+	    	<li>For the first two commands, we must be root (see the current_uid() macro), 
+	    		to be able to intercept or release system calls.
+	    	</li>
+	    	<li>For the last two commands, the following logic applies:
+	    		<ul type="circle">
+	    			<li>Is the calling process root? if so, all is good, no doubts about 
+	    				permissions.
+	    			</li>
+	    			<li>If it is not, then check if the <code>pid</code> requested is 
+	    				owned by the calling process 
+	    			</li>
+	    			<li>Also, if <code>pid</code> is 0 and the calling process is not root, 
+	    				then access is denied (monitoring all pids should only be allowed for 
+	    				a superuser, for obvious reasons).
+	    			</li>
+	  			</ul>
+	    	</li>
+	  </ul>
+	</li>
+	<li>
+		Check for correct context of commands (-EINVAL):
+		<ul>
+	    	<li>Cannot de-intercept a system call that has not been intercepted yet.
+	    	</li>
+	    	<li>Cannot stop monitoring for a pid that is not being monitored, or if 
+	    		the system call has not been intercepted yet.
+          <font color="red">If the system call has not been intercepted yet,
+          a command to start monitoring a pid for that syscall is also invalid.
+					</font>
+	    	</li>
+	  </ul>
+	</li>
+	<li>
+		Check for -EBUSY conditions:
+		<ul>
+	    	<li>If intercepting a system call that is already intercepted.
+	    	</li>
+	    	<li>If monitoring a pid that is already being monitored.
+	    	</li>
+	  </ul>
+	</li>		
+	<li>
+		If a pid cannot be added to a monitored list, due to no memory being available, 
+		an -ENOMEM error code should be returned. The starter code provides a set of 
+		functions that enable operation with kernel lists.
+	</li>
+</ol>
+</p>
+
+<!--
+<p>	
+	What if a stop monitoring request comes in for a specific PID (let's call it P), 
+	for a syscall that monitors all PIDs?
+	Is that an error or should we treat this as a special case? The answer is the latter, it should 
+	be treated as a special case, do not return an error code.
+	If we already monitor all PIDs for a syscall, then you might have to think of a solution 
+	to make sure that you can keep monitoring all the PIDs in the system, except for P. 
+	Please keep in mind that some processes that will be monitored may not have even started 
+	their execution. 
+	Also, please keep in mind that we might have other stop monitoring requests for the same
+	syscall, in which case, you might have to think of how to use the list of monitored pids
+	in a smart way. One possibility is turning the list of monitored pids into a "blacklist" 
+	(keeping track of the pids that are <i>not</i> being monitored). 
+</p>
+-->
+
+<p>	
+	What if a stop monitoring request comes in for a specific PID (let's call it P), 
+	for a syscall that monitors all PIDs?
+	Is that an error or should we treat this as a special case? 
+	For this assignment, you can assume that this is an error and simply return -EINVAL. 
+	<br/> BONUS (5% applicable to marks lost elsewhere on this assignment):
+	Instead of ignoring this case and returning -EINVAL, you can optionally treat this 
+	as a special case.
+	If we already monitor all PIDs for a syscall, then you might have to think of a solution 
+	to make sure that you can keep monitoring all the PIDs in the system, except for P. 
+	Please keep in mind that some processes that will be monitored may not have even started 
+	their execution. 
+	Also, please keep in mind that we might have other stop monitoring requests for the same
+	syscall, in which case, you might have to think of how to use the list of monitored pids
+	in a smart way. One possibility is turning the list of monitored pids into a "blacklist" 
+	(keeping track of the pids that are <i>not</i> being monitored). 
+</p>
+
+
+<h2>General information</h2>
+
+<p>
+<ol>
+	<li>
+	You must use the starter code provided, which gives you detailed instructions on 
+	what you need to implement. Please make sure to implement all the parts indicated 
+	using detailed TODO comments. Please make sure to first attend the tutorial which will 
+	help you write a simple kernel module and show you how to use printk statements 
+	for debugging. See the tutorial notes as well.<br/>
+	</li>
+	<li>
+	Your assignment will be tested on a virtual machine on CDF (aka teaching labs). 
+  You can access this 
+	virtual machine from your teaching labs account, or you can download the provided virtual 
+	machine disk image and install it on your personal computer through a virtualization 
+	solution (for example, free software include VMWare Player, VirtualBox, etc.)
+	</li>
+	<li>
+	We strongly recommend that you do NOT use the virtual machine for development, but 
+	rather only for testing and debugging. While working on this assignment, it is quite 
+	likely you will crash the kernel and although you can kill and restart the VM, 
+	there will be no guarantee that your code will still be there (the VM tools on 
+	the teaching labs won't guarantee you safe snapshots). To prevent your hard work from possible 
+	data corruption, either do an SVN checkout inside the VM and use your repository 
+	to commit your code periodically from within the VM, or make sure to at least 
+	back up your code periodically (e.g., by scp-ing it back to your teaching labs account). 
+	</li>
+</ol>
+</p>
+
+
+<h2>Accessing the Virtual Machine on the teaching labs</h2>
+
+   Guidelines for accessing the VM on the teaching labs  
+   <a href="VirtualMachineInstructions.txt">can be found here</a>.
+   Please make sure to follow the instructions carefully.
+
+<h2>Setup VM On Your Own Machine</h2>
+
+	Note: Your assignment has to ultimately be tested on a teaching lab machine. 
+	However, if you wish to develop it and test it first on your own machine, 
+	using virtualization software (*do not test your assignment directly on 
+	your computer!*), then we will provide some basic instructions on how to do so.
+	
+	Since VirtualBox is one of the most portable (as well as free) virtualization 
+	software, <a href="VirtualBoxInstructions.html">here</a> and 
+	<a href="http://www.cs.toronto.edu/~dbkats/csc369-virtualbox-instructions.html">here</a>
+	are some basic guidelines
+	on how to install the VM image in VirtualBox on your computer 
+	(of course, many tutorials can be found online as well, so feel free
+	to consult other sources if something does not work well for your own machine). 
+
+
+<h2>Implementation details</h2>
+
+<p>
+<ol>
+	<li>
+		Since the number of system calls is rather small (~300), and for performance reasons, 
+		you must maintain the system call information in an array. Each array element will 
+		contain information, as described in the mytable struct:
+		<br/>
+		<code>
+		typedef struct {<br/>
+			&nbsp;&nbsp;&nbsp; asmlinkage long (*f)(struct pt_regs);<br/>
+			&nbsp;&nbsp;&nbsp; int intercepted;<br/>
+			&nbsp;&nbsp;&nbsp; int monitored;<br/>
+			&nbsp;&nbsp;&nbsp; int listcount;<br/>
+			&nbsp;&nbsp;&nbsp; struct list_head my_list;<br/>
+		} mytable;
+		</code><br/>
+	</li>
+	<li>
+		You must use a linked list for storing information about the monitored processes; 
+		using an array of fixed size is entirely inadequate (because the search time will be 
+		the same as a linked list, the implementation complexity will be the same, but the 
+		size of the array will limit the number of entries).
+	</li>
+	<li>
+		The system call table is exported by the void* sys_call_table[NR_syscalls], 
+		present in one of the kernel source files from the VM image on the teaching labs. 
+		If you wish to configure your own kernel image and re-compile it, you can modify the source 
+		code by adding the following two lines in the <code>/usr/src/linux-source-2.6.32/arch/x86/kernel/i386_ksyms_32.c</code> file:<br/>
+		<code>
+			&nbsp;&nbsp;&nbsp; extern void* sys_call_table[];<br/>
+			&nbsp;&nbsp;&nbsp; EXPORT_SYMBOL(sys_call_table);<br/>
+		</code>
+		then recompile the kernel. Again, our virtual machine image already has these 
+		changes in place.
+	</li>
+	<li>
+		Since the 2.6 kernel is preemptive, you must protect access to shared data. 
+		You will be using spinlocks for this purpose. The use of spinlocks is fairly 
+		simple and you have been shown some examples in one of the tutorials.<br/>
+	</li>
+	<li>
+		You must use the system call number 0 for MY_CUSTOM_SYSCALL. Do not attempt 
+		to use a different existing system call number, as that may result in the kernel 
+		misbehaving (to say the least). Remember that lots of services running in your 
+		OS make use of these system calls.
+	</li>
+	<li>
+		Logging the system call will be done using the <code>log_message</code> macro, 
+		defined in the interceptor.h header file.
+	</li>
+	<li>
+		For testing, you can use the provided tester programs. After you compile a test program (the provided Makefile only compiles your interceptor module, not any tester!), remember to run the tester using sudo privileges in the VM. <br/>
+		To facilitate your testing, you should first try to implement the commands to intercept and release system calls. When you are ready to test these, use the <code>test_intercept.c</code> tester.<br/>
+		Once all tests pass, you can proceed to implementing the monitoring commands. To test all commands (both related to intercepting and to monitoring), you can use the <code>test_full.c</code> tester.<br/>
+		
+	</li>
+</ol>
+</p>
+
+<h2>Testing your code</h2>
+
+<p>
+To help you test your code, we have provided two testers, which you will
+also find in your repositories. To encourage you to test as you go,
+we are providing you with two testers:<br/>
+	<ul class="bullet-list">
+		<li><code>test_intercept.c</code> - tests if your intercept and de-intercept
+		commands work correctly. You should first implement these and make sure the tester
+		passes all cases. </li>
+		<li><code>test_full.c</code> - tests if all commands (including intercept, 
+		release, and both monitoring commands) work properly. This is a superset of 
+		the first tester, and you should only use once your code passes the first tester. 
+		</li>		
+	</ul>
+
+  The tester loads your module and tests some basic functionality. It is by no means
+  a comprehensive tool to ensure your code works for every corner case. 
+  To ensure that your code works correctly in all possible
+  scenarios, you should add more test cases by modifying
+  the testers (see code comments in main). 
+  However, please do not submit your own tester files, because they will not be marked.
+  
+  The tester will also not catch synchronization bugs, except for blatant deadlocks. 
+  It is your responsibility to ensure that your code is not likely to run into synchonization
+  problems.
+  
+  Finally, when testing, you will likely see the tester crash on various tests, due to
+  bugs in your module. 
+  During your debugging, please feel free to go in each tester, and comment out some of the 
+  system calls being tested, if you wish to debug each test case in isolation.
+	
+</p>
+
+<h2>Other Useful Tips</h2>
+
+	<ul class="bullet-list">
+		<li>Again, run tests ONLY in the virtual machine, NOT native computer,
+		unless you hate your laptop.</li>
+		<li>
+		Once more, we strongly recommend that you do NOT use the virtual machine
+		for development, but rather only for testing and debugging. Since it is
+		quite likely you will crash the kernel and there will be no guarantee
+		that your code will be intact. To prevent your hard work from possible
+		data corruption, either do an SVN checkout inside the VM and commit
+		your code periodically, or make sure to at least back up your code
+		periodically.
+		</li>
+		<li>Reading and understanding code is as important as (if not more
+		important than) writing code.</li>
+		<li>The comments in the starter code have a lot of information, make
+		sure to read them carefully.</li>
+		<li>Remember that when we de-intercept a syscall, the original system call 
+		must be restored in the system call table. For that you must properly store 
+		the original system call before replacing it.</li>
+		<li>For debugging, learn how to use the <code>printk</code> function,
+		which prints messages to kernel log. See tutorial notes as well.</li>
+		<li>Use <code>dmesg</code> command to check the kernel log.</li>
+	</ul>
+
+<h2>Submission</h2>
+
+<p> You will submit the <code>interceptor.c</code> file that contains your 
+	implementation, along with the files required to build your program (including 
+	the provided <code>interceptor.h</code>, <code>Makefile</code>, and <code>Kbuild</code>, 
+	which you should not modify). Do not submit executables, or tester files!
+</p>
+
+<p>
+	For those working in pairs, please make sure to commit to the group repository.
+	If you previously had trouble forming groups on A0, please contact me in advance.
+	Do not leave this to the last minute, technical trouble with your repository 
+	will not get you an extension! 
+</p>
+
+<p>
+	Additionally, you must submit an INFO.txt file, which contains as the first 3 lines
+	the following:
+	<ul>
+	<li>your name</li> 
+	<li>your UtorID(s)</li>
+	<li>the <b>svn revision number</b> for your last submission. 
+		As a general rule, we will always take the last revision before the deadline 
+		(or after, if you decide to use grace tokens), so this is simply a sanity check 
+		for us that we did not miss a revision when we retrieve your code via MarkUs.</li>
+	</ul>
+	Aside from this, please feel free to describe problems you've encountered, what isn't 
+	fully implemented (or doesn't work fully), any special design decisions you've taken, etc.
+</p>
+
+<p>
+	Make sure your code compiles without any errors or warnings.<br/>
+	<b>Code that does not compile will receive zero marks!</b>
+</p>
+    
+
+<h2>Marking scheme</h2>
+<p>
+	We will be marking based on correctness (90%), and coding style (10%).
+	Make sure to write legible code, properly indented, and to include comments
+	where appropriate (excessive comments are just as bad as not providing enough
+	comments). Code structure and clarity will be marked strictly!<br/>
+	<b>Once again: code that does not compile will receive 0 marks!</b>
+</p>
+
+  </div>
+</div>
+
+
+      <hr>
+      <footer>
+        <p>
+          &copy; 2017 Bogdan Simion
+          <span class="pull-right text-muted">
+            powered by
+            <a href="http://jekyll-bootstrap-3.github.io/preview/#/theme/Bootstrap" target="_blank" title="The Definitive Jekyll Blogging Framework">Jekyll-Bootstrap-3</a>
+            and <a href="http://getbootstrap.com" target="_blank">Twitter Bootstrap 3.0.3</a>
+          </span>
+        </p>
+      </footer>
+    </div>
+
+    
+
+    <script src="http://www.teach.cs.toronto.edu/~csc369h/winter/assets/themes/bootstrap/resources/jquery/jquery.min.js"></script>
+    <script src="http://www.teach.cs.toronto.edu/~csc369h/winter/assets/themes/bootstrap/resources/bootstrap/js/bootstrap.min.js"></script>
+  </body>
+</html>
+
