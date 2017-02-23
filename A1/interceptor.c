@@ -462,19 +462,17 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		//try to delete a pid from a system call monitor every pid
 		if ((table[syscall].monitored == 2) && (pid!=0)) {
 			add_pid_sysc(pid, syscall);
-			spin_unlock(&my_table_lock);
 		//try to delete one pid from system call
 		} else if (pid != 0) {
 			del_pid_sysc(pid, syscall);
-			spin_unlock(&my_table_lock);
 		//try to delete all pid from system call
 		} else if (pid == 0) {
 			if (table[syscall].monitored != 0) {
 				destroy_list(syscall);
 				table[syscall].monitored = 0;
-				spin_unlock(&my_table_lock);
 			}
 		}
+		spin_unlock(&my_table_lock);
 	}
 
 	return 0;
